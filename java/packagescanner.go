@@ -10,7 +10,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"runtime/trace"
@@ -113,6 +115,42 @@ func (s *Scanner) Configure(ctx context.Context, f indexer.ConfigDeserializer, c
 	return nil
 }
 
+
+/*func OpenAJarFile(ctx context.Context, buf bytes.Buffer, file *"io/os".File, sh "crypto/hash".Hash) */
+func OpenAJarFile(ctx context.Context, buf bytes.Buffer, file fs.File, sh hash.Hash) (*zip.Reader, error) {
+	sh.Reset()
+	buf.Reset()
+	fStat, err := file.Stat()
+	if err == nil {
+		buf.Grow(int(fStat.Size()))
+	}
+	sz, err := buf.ReadFrom(io.TeeReader(file, sh))
+	file.Close()
+	if err != nil {
+		return nil, err
+	}
+	zb := buf.Bytes()
+	if !bytes.Equal(zb[:4], jar.Header) {
+		// Has a reasonable size and name, but isn't really a zip.
+		zlog.Debug(ctx).Msg("not actually a jar: bad header")
+		return nil, nil
+	}
+	z, err := zip.NewReader(bytes.NewReader(zb), sz)
+	switch {
+	case errors.Is(err, nil):
+	case errors.Is(err, zip.ErrFormat):
+		zlog.Info(ctx).
+		Err(err).
+		Msg("not actually a jar: invalid zip")
+		return nil, nil
+	default:
+		return nil, err
+	}
+
+	return z, nil
+}
+
+
 // Scan attempts to find jar, war or ear files and record the package
 // information there.
 //
@@ -140,47 +178,26 @@ func (s *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*claircor
 	}
 	// All used in the loop below.
 	var ret []*claircore.Package
-	buf := getBuf()
+	buf := GetBuf()
 	sh := sha1.New()
 	ck := make([]byte, sha1.Size)
 	doSearch := s.root != nil
-	defer putBuf(buf)
+	defer PutBuf(buf)
 	for _, n := range ars {
 		ctx := zlog.ContextWithValues(ctx, "file", n)
-		sh.Reset()
-		buf.Reset()
 		// Calculate the SHA1 as it's buffered, since it may be needed for
 		// searching later.
+
 		f, err := sys.Open(n)
 		if err != nil {
-			return nil, err
+			continue
 		}
-		fStat, err := f.Stat()
-		if err == nil {
-			buf.Grow(int(fStat.Size()))
+
+		z, err := OpenAJarFile(ctx, *buf, f, sh)
+		if err != nil || z == nil {
+			continue
 		}
-		sz, err := buf.ReadFrom(io.TeeReader(f, sh))
 		f.Close()
-		if err != nil {
-			return nil, err
-		}
-		zb := buf.Bytes()
-		if !bytes.Equal(zb[:4], jar.Header) {
-			// Has a reasonable size and name, but isn't really a zip.
-			zlog.Debug(ctx).Msg("not actually a jar: bad header")
-			continue
-		}
-		z, err := zip.NewReader(bytes.NewReader(zb), sz)
-		switch {
-		case errors.Is(err, nil):
-		case errors.Is(err, zip.ErrFormat):
-			zlog.Info(ctx).
-				Err(err).
-				Msg("not actually a jar: invalid zip")
-			continue
-		default:
-			return nil, err
-		}
 
 		infos, err := jar.Parse(ctx, n, z)
 		switch {

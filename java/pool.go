@@ -11,7 +11,7 @@ import (
 // reallocations.
 var pool sync.Pool
 
-func getBuf() *bytes.Buffer {
+func GetBuf() *bytes.Buffer {
 	const startSize = 4 * 1024 * 1024 // 4 MiB
 	if b, ok := pool.Get().(*bytes.Buffer); ok {
 		return b
@@ -21,7 +21,7 @@ func getBuf() *bytes.Buffer {
 	return &b
 }
 
-func putBuf(b *bytes.Buffer) {
+func PutBuf(b *bytes.Buffer) {
 	b.Reset()
 	pool.Put(b)
 }
