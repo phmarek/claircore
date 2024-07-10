@@ -52,8 +52,8 @@ type QueryResult struct {
 
 // Scanner implements the scanner.PackageScanner interface.
 type Scanner struct{
-	client 		          *http.Client
-	URL 		          string
+	client 		              *http.Client
+	URL 		              string
 	logUnknowns               bool
 	reportUnknownFilesPackage bool
 }
@@ -89,14 +89,22 @@ func (s *Scanner) Configure(ctx context.Context, f indexer.ConfigDeserializer, c
 	return nil
 }
 
-
 func recursiveJarRunner(ctx context.Context, sys fs.FS,
-							path string, pre string,
+							path string, pre string, 
+							depth int, maxDepth *int,
 							output strings.Builder) error {
+	prefix  := fmt.Sprintf("%s%s:", pre, path)
+
+	ctx = zlog.ContextWithValues(ctx,
+		"jarPrefix", prefix,
+		"depth", fmt.Sprintf("%d", depth))
+
+	if depth > *maxDepth {
+		*maxDepth = depth
+	}
+
 	buf := java.GetBuf()
 	defer java.PutBuf(buf)
-
-	prefix  := fmt.Sprintf("%s%s:", pre, path)
 
 	f, err := sys.Open(path)
 	if err != nil {
@@ -112,7 +120,6 @@ func recursiveJarRunner(ctx context.Context, sys fs.FS,
 	zipfile, err := java.OpenAJarFile(ctx, *buf, f, h)
 	if err != nil {
 		zlog.Error(ctx).Err(err).
-		Str("jar", pre).
 		Msg("Error reading jar")
 		return err
 	}
@@ -123,13 +130,12 @@ func recursiveJarRunner(ctx context.Context, sys fs.FS,
 		}
 
 		if strings.HasSuffix(strings.ToLower(f.Name), ".jar") {
-			recursiveJarRunner(ctx, sys, prefix, f.Name, output)
+			recursiveJarRunner(ctx, sys, prefix, f.Name, depth +1, maxDepth, output)
 		}
 
 		rc, err := f.Open()
 		if err != nil {
 			zlog.Warn(ctx).Err(err).
-			Str("jar", prefix).
 			Str("file", f.Name).
 			Msg("Error opening jar-content")
 			return err
@@ -137,7 +143,6 @@ func recursiveJarRunner(ctx context.Context, sys fs.FS,
 		h.Reset()
 		if _, err := io.Copy(h, rc); err != nil {
 			zlog.Warn(ctx).Err(err).
-			Str("jar", prefix).
 			Str("file", f.Name).
 			Msg("Error reading jar-content")
 			return err
@@ -205,6 +210,8 @@ func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*clairco
 
 	h := sha256.New()
 	found := 0
+	jars := 0
+	maxDepth := 0
 
 	walk := func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -217,7 +224,8 @@ func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*clairco
 			// TODO: file type detection (but not all zip files?)
 			// Break down other file types?
 			if strings.HasSuffix(strings.ToLower(p), ".jar") {
-				recursiveJarRunner(ctx, sys, p, "", post_content);
+				jars++
+				recursiveJarRunner(ctx, sys, p, "", 1, &maxDepth, post_content)
 			}
 
 			f, err := sys.Open(p)
@@ -237,7 +245,6 @@ func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*clairco
 			post_content.WriteString(" /")
 			post_content.WriteString(p)
 			post_content.WriteString("\x00")
-
 		}
 		return nil
 	}
@@ -246,8 +253,10 @@ func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*clairco
 		return nil, err
 	}
 	zlog.Debug(ctx).
+		Int("maxDepth", maxDepth).
+		Int("jars", jars).
 		Int("fcount", found).
-		Msg("scanned files")
+		Msg("scan statistics")
 
 	if (found == 0) {
 		return nil, nil
@@ -278,6 +287,12 @@ func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*clairco
 	zlog.Debug(ctx).
 		Str("version", result.Dataset).
 		Msg("HTTP query succeeded, dataset version")
+
+	m_d := claircore.Package{
+		Name: "jar-max-depth",
+		Version: fmt.Sprintf("%d", maxDepth),
+	}
+	result.Packages = append(result.Packages, &m_d)
 
 	/* Too much noise?? */
 	if (len(result.Unknowns) > 0) {
