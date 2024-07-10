@@ -26,6 +26,7 @@ import (
 	"github.com/quay/claircore/rhel"
 	"github.com/quay/claircore/rhel/rhcc"
 	"github.com/quay/claircore/rpm"
+	"github.com/quay/claircore/webservice_query"
 	"github.com/quay/claircore/ruby"
 	"github.com/quay/claircore/whiteout"
 )
@@ -98,6 +99,7 @@ func New(ctx context.Context, opts *Options, cl *http.Client) (*Libindex, error)
 			alpine.NewEcosystem(ctx),
 			rhel.NewEcosystem(ctx),
 			rpm.NewEcosystem(ctx),
+			webservice_query.NewEcosystem(ctx),
 			python.NewEcosystem(ctx),
 			java.NewEcosystem(ctx),
 			rhcc.NewEcosystem(ctx),
