@@ -90,6 +90,72 @@ func (s *Scanner) Configure(ctx context.Context, f indexer.ConfigDeserializer, c
 }
 
 
+func recursiveJarRunner(ctx context.Context, sys fs.FS,
+							path string, pre string,
+							output strings.Builder) error {
+	buf := java.GetBuf()
+	defer java.PutBuf(buf)
+
+	prefix  := fmt.Sprintf("%s%s:", pre, path)
+
+	f, err := sys.Open(path)
+	if err != nil {
+		zlog.Warn(ctx).Err(err).
+		Str("file", pre).
+		Msg("Error reading file")
+		return err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+
+	zipfile, err := java.OpenAJarFile(ctx, *buf, f, h)
+	if err != nil {
+		zlog.Error(ctx).Err(err).
+		Str("jar", pre).
+		Msg("Error reading jar")
+		return err
+	}
+
+	for _, f := range zipfile.File {
+		if (f.FileInfo().IsDir()) {
+			continue
+		}
+
+		if strings.HasSuffix(strings.ToLower(f.Name), ".jar") {
+			recursiveJarRunner(ctx, sys, prefix, f.Name, output)
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			zlog.Warn(ctx).Err(err).
+			Str("jar", prefix).
+			Str("file", f.Name).
+			Msg("Error opening jar-content")
+			return err
+		}
+		h.Reset()
+		if _, err := io.Copy(h, rc); err != nil {
+			zlog.Warn(ctx).Err(err).
+			Str("jar", prefix).
+			Str("file", f.Name).
+			Msg("Error reading jar-content")
+			return err
+		}
+
+		output.WriteString(hex.EncodeToString(h.Sum(nil)))
+		output.WriteString(" /")
+		output.WriteString(prefix)
+		output.WriteString(f.Name)
+		output.WriteString("\x00")
+
+		rc.Close()
+	}
+
+	return nil
+}
+
+
 // Scan hashes all files within the layer and pushes the SHA256 and the filenames
 // to the configured webservice.
 //
@@ -138,10 +204,7 @@ func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*clairco
 	post_content.WriteString("\x00")
 
 	h := sha256.New()
-	hj := sha256.New()
 	found := 0
-	buf := java.GetBuf()
-	defer java.PutBuf(buf)
 
 	walk := func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -154,50 +217,7 @@ func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*clairco
 			// TODO: file type detection (but not all zip files?)
 			// Break down other file types?
 			if strings.HasSuffix(strings.ToLower(p), ".jar") {
-				f, err := sys.Open(p)
-				if err != nil {
-					zlog.Warn(ctx).Err(err).
-					Str("file", p).
-					Msg("Error reading file")
-				}
-				defer f.Close()
-
-				zipfile, err := java.OpenAJarFile(ctx, *buf, f, h)
-				if err != nil {
-					zlog.Error(ctx).Err(err).
-						Str("jar", p).
-						Msg("Error reading jar")
-				}
-
-				for _, f := range zipfile.File {
-					if (f.FileInfo().IsDir()) {
-						continue;
-					}
-
-					rc, err := f.Open()
-					if err != nil {
-						zlog.Warn(ctx).Err(err).
-							Str("jar", p).
-							Str("file", f.Name).
-							Msg("Error opening jar-content")
-					}
-					hj.Reset()
-					if _, err := io.Copy(hj, rc); err != nil {
-						zlog.Warn(ctx).Err(err).
-							Str("jar", p).
-							Str("file", f.Name).
-							Msg("Error reading jar-content")
-					}
-
-					post_content.WriteString(hex.EncodeToString(hj.Sum(nil)))
-					post_content.WriteString(" /")
-					post_content.WriteString(p)
-					post_content.WriteString(":")
-					post_content.WriteString(f.Name)
-					post_content.WriteString("\x00")
-
-					rc.Close()
-				}
+				recursiveJarRunner(ctx, sys, p, "", post_content);
 			}
 
 			f, err := sys.Open(p)
