@@ -46,7 +46,7 @@ type QueryResult struct {
 	Dataset string `json:"timestamp"`
 	// CpuTime math.Float64 `json:"cpu-secs"`
 	Warnings []string `json:"warnings"`
-	Unknowns map[string]string `json:"unknown"`
+	Unknowns map[string][]string `json:"unknown"`
 	Packages []*claircore.Package `json:"pkgs"`
 }
 
@@ -298,15 +298,15 @@ func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*clairco
 	if (len(result.Unknowns) > 0) {
 		if (ps.reportUnknownFilesPackage) {
 			u_p := claircore.Package{
-				Name: "unknown-files",
+				Name: "unknown-hashes",
 				Version: fmt.Sprintf("%d", len(result.Unknowns)),
 			}
 			result.Packages = append(result.Packages, &u_p)
 		}
 		if (ps.logUnknowns) {
 			data := zerolog.Arr()
-			for _, s := range result.Unknowns {
-				data.Str(s)
+			for h, _ := range result.Unknowns {
+				data.Str(h)
 			}
 			zlog.Warn(ctx).
 			Array("unknowns", data).
