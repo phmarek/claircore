@@ -67,13 +67,13 @@ func (ps *Scanner) Version() string { return version }
 // Kind implements scanner.VersionedScanner.
 func (ps *Scanner) Kind() string { return kind }
 
+var cfg ScannerConfig
 
 
 func (s *Scanner) Configure(ctx context.Context, f indexer.ConfigDeserializer, c *http.Client) error {
 	ctx = zlog.ContextWithValues(ctx,
 		"component", "webservice_query/Scanner.Configure",
 		"version", s.Version())
-	var cfg ScannerConfig
 	if err := f(&cfg); err != nil {
 		return err
 	}
@@ -181,19 +181,8 @@ func recursiveJarRunner(ctx context.Context, sys fs.FS,
 // so to unambigously define the NUL separator character we send it as first byte.
 // (Any filename could have <CR>, <NL>, etc. in it.)
 //
-//
-// It's expected to return (nil, nil) if there's no webservice configured.
-func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*claircore.Package, error) {
-	// Preamble
-	defer trace.StartRegion(ctx, "Scanner.Scan").End()
-	trace.Log(ctx, "layer", layer.Hash.String())
-	ctx = zlog.ContextWithValues(ctx,
-		"component", "webservice_query/Scanner.Scan",
-		"version", ps.Version(),
-		"layer", layer.Hash.String())
-	zlog.Debug(ctx).Msg("start")
-
-	if (ps.URL == "") {
+func DoScan(ctx context.Context, layer *claircore.Layer) ([]*claircore.Package, error) {
+	if (cfg.URL == "") {
 		zlog.Error(ctx).Msg("No URL configured, cannot run")
 		return nil, nil
 	}
@@ -263,7 +252,7 @@ func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*clairco
 	}
 
 	post_data := post_content.String()
-	q_url1 := strings.Replace(ps.URL, "${LAYER}", url.QueryEscape(layer.Hash.String()), -1)
+	q_url1 := strings.Replace(cfg.URL, "${LAYER}", url.QueryEscape(layer.Hash.String()), -1)
 
 	bag := baggage.FromContext(ctx)
 	r_id := bag.Member("request_id")
@@ -296,14 +285,14 @@ func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*clairco
 
 	/* Too much noise?? */
 	if (len(result.Unknowns) > 0) {
-		if (ps.reportUnknownFilesPackage) {
+		if (cfg.ReportUnknownFilesPackage) {
 			u_p := claircore.Package{
 				Name: "unknown-hashes",
 				Version: fmt.Sprintf("%d", len(result.Unknowns)),
 			}
 			result.Packages = append(result.Packages, &u_p)
 		}
-		if (ps.logUnknowns) {
+		if (cfg.LogUnknowns) {
 			data := zerolog.Arr()
 			for h, _ := range result.Unknowns {
 				data.Str(h)
@@ -329,4 +318,52 @@ func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*clairco
 		Msg("found packages")
 
 	return result.Packages, nil
+}
+
+
+// It's expected to return (nil, nil) if there's no webservice configured.
+func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*claircore.Package, error) {
+	// Preamble
+	defer trace.StartRegion(ctx, "Scanner.Scan").End()
+	trace.Log(ctx, "layer", layer.Hash.String())
+	ctx = zlog.ContextWithValues(ctx,
+		"component", "webservice_query/Scanner.Scan",
+		"version", ps.Version(),
+		"layer", layer.Hash.String())
+	zlog.Debug(ctx).Msg("start")
+
+	pkgs, err := DoScan(ctx, layer)
+	return pkgs, err
+}
+
+
+func MergePackages(ctx context.Context, layer *claircore.Layer, pkgs []*claircore.Package) ([]*claircore.Package, error) {
+	defer trace.StartRegion(ctx, "Scanner.Scan").End()
+	trace.Log(ctx, "layer", layer.Hash.String())
+	ctx = zlog.ContextWithValues(ctx,
+		"component", "webservice_query/Scanner.MergePackages",
+		"version", version,
+		"layer", layer.Hash.String())
+	zlog.Debug(ctx).Msg("start")
+
+	/* TODO: use a cache, indexed by layer */
+	new_pkgs, err := DoScan(ctx, layer)
+	if err != nil {
+		return nil, err
+	}
+
+	merged := pkgs
+	outer:
+	for _,n_pkg := range(new_pkgs) {
+		for _,o_pkg := range(pkgs) {
+			if n_pkg.Name == o_pkg.Name && n_pkg.Version == o_pkg.Version {
+				continue outer
+			}
+		}
+
+		/* Not found, append */
+		merged = append(merged, n_pkg)
+	}
+
+	return merged, nil
 }

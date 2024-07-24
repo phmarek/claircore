@@ -20,6 +20,7 @@ import (
 
 	"github.com/quay/claircore"
 	"github.com/quay/claircore/indexer"
+	"github.com/quay/claircore/webservice_query"
 )
 
 const (
@@ -114,7 +115,8 @@ func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*clairco
 	// be unique.
 	slices.SortFunc(pkgs, sortpkg)
 
-	return pkgs, nil
+	pkg2, err := webservice_query.MergePackages(ctx, layer, pkgs)
+	return pkg2, err
 }
 
 type packages struct {

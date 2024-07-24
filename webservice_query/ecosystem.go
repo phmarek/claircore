@@ -7,11 +7,12 @@ import (
 	"github.com/quay/claircore/linux"
 )
 
-// NewEcosystem provides the set of scanners and coalescers for the dpkg ecosystem
+// NewEcosystem provides the set of scanners and coalescers for the webservice_query ecosystem
 func NewEcosystem(ctx context.Context) *indexer.Ecosystem {
 	return &indexer.Ecosystem{
 		PackageScanners: func(ctx context.Context) ([]indexer.PackageScanner, error) {
 			return []indexer.PackageScanner{
+				/* For initializing the configuration */
 				&Scanner{},
 			}, nil
 		},

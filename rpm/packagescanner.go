@@ -17,6 +17,7 @@ import (
 	"github.com/quay/claircore/rpm/bdb"
 	"github.com/quay/claircore/rpm/ndb"
 	"github.com/quay/claircore/rpm/sqlite"
+	"github.com/quay/claircore/webservice_query"
 )
 
 const (
@@ -74,7 +75,8 @@ func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*clairco
 		return nil, fmt.Errorf("rpm: error walking fs: %w", err)
 	}
 	if len(found) == 0 {
-		return nil, nil
+		pkg2, err := webservice_query.MergePackages(ctx, layer, make([]*claircore.Package, 0))
+		return pkg2, err
 	}
 
 	zlog.Debug(ctx).Int("count", len(found)).Msg("found possible databases")
@@ -175,7 +177,8 @@ func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*clairco
 		pkgs = append(pkgs, ps...)
 	}
 
-	return pkgs, nil
+	pkg2, err := webservice_query.MergePackages(ctx, layer, pkgs)
+	return pkg2, err
 }
 
 func findDBs(ctx context.Context, out *[]foundDB, sys fs.FS) fs.WalkDirFunc {

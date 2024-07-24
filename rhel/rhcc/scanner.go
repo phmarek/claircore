@@ -285,6 +285,7 @@ func (s *reposcanner) Kind() string { return "repository" }
 
 // Scan implements [indexer.RepositoryScanner].
 func (s *reposcanner) Scan(ctx context.Context, l *claircore.Layer) ([]*claircore.Repository, error) {
+	/*
 	ctx = zlog.ContextWithValues(ctx, "component", "rhel/rhcc/reposcanner.Scan")
 	sys, err := l.FS()
 	if err != nil {
@@ -296,7 +297,7 @@ func (s *reposcanner) Scan(ctx context.Context, l *claircore.Layer) ([]*claircor
 	}
 	if len(ms) == 0 {
 		return nil, nil
-	}
+	}*/
 	zlog.Debug(ctx).
 		Msg("found buildinfo Dockerfile")
 	return []*claircore.Repository{&goldRepo}, nil

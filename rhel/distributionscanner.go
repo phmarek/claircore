@@ -56,7 +56,8 @@ func (ds *DistributionScanner) Scan(ctx context.Context, l *claircore.Layer) ([]
 	}
 	if d == nil {
 		zlog.Debug(ctx).Msg("didn't find an os-release or redhat-release file")
-		return nil, nil
+		/* TODO: should depend on packages' distributions returned by webservice */
+		return []*claircore.Distribution{mkRelease(8), mkRelease(9)}, nil
 	}
 	return []*claircore.Distribution{d}, nil
 }
