@@ -286,7 +286,7 @@ func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*clairco
 
 	zlog.Debug(ctx).
 		Str("version", result.Dataset).
-		Msg("HTTP query succeeded, dataset version")
+		Msg("webservice query succeeded")
 
 	m_d := claircore.Package{
 		Name: "jar-max-depth",
