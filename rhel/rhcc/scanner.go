@@ -222,7 +222,7 @@ type mappingFile struct {
 func findLabels(ctx context.Context, sys fs.FS) (map[string]string, string, error) {
 	ms, err := fs.Glob(sys, "root/buildinfo/Dockerfile-*")
 	if err != nil { // Can only return ErrBadPattern.
-		panic("progammer error: " + err.Error())
+		panic("programmer error: " + err.Error())
 	}
 	if len(ms) == 0 {
 		return nil, "", errNotFound
@@ -292,7 +292,7 @@ func (s *reposcanner) Scan(ctx context.Context, l *claircore.Layer) ([]*claircor
 	}
 	ms, err := fs.Glob(sys, "root/buildinfo/Dockerfile-*")
 	if err != nil { // Can only return ErrBadPattern.
-		panic("progammer error")
+		panic("programmer error")
 	}
 	if len(ms) == 0 {
 		return nil, nil
