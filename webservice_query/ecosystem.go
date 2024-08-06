@@ -22,7 +22,9 @@ func NewEcosystem(ctx context.Context) *indexer.Ecosystem {
 			}, nil
 		},
 		RepositoryScanners: func(ctx context.Context) ([]indexer.RepositoryScanner, error) {
-			return []indexer.RepositoryScanner{}, nil
+			return []indexer.RepositoryScanner{
+				&RepositoryScanner{},
+			}, nil
 		},
 		Coalescer: func(ctx context.Context) (indexer.Coalescer, error) {
 			return linux.NewCoalescer(), nil

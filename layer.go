@@ -10,7 +10,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 
+	"github.com/quay/claircore"
 	"github.com/quay/claircore/pkg/tarfs"
 )
 
@@ -67,6 +69,10 @@ type Layer struct {
 	// Deprecated: This is exported for historical reasons and may stop being
 	// populated in the future.
 	Headers map[string][]string `json:"headers"`
+
+    ViaChkSumIdentifiedPkgs []*claircore.Package
+	ViaChkSumIdentifiedRepos []*claircore.Repository
+	ChkSumLock sync.Mutex
 
 	cleanup []io.Closer
 	sys     fs.FS

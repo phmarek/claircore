@@ -48,6 +48,7 @@ type QueryResult struct {
 	Warnings []string `json:"warnings"`
 	Unknowns map[string][]string `json:"unknown"`
 	Packages []*claircore.Package `json:"pkgs"`
+	Repositories []*claircore.Repository `json:"repos"`
 }
 
 // Scanner implements the scanner.PackageScanner interface.
@@ -317,6 +318,9 @@ func DoScan(ctx context.Context, layer *claircore.Layer) ([]*claircore.Package, 
 		Int("count", len(result.Packages)).
 		Msg("found packages")
 
+	layer.ViaChkSumIdentifiedPkgs = result.Packages
+	layer.ViaChkSumIdentifiedRepos = result.Repositories
+
 	return result.Packages, nil
 }
 
@@ -331,6 +335,9 @@ func (ps *Scanner) Scan(ctx context.Context, layer *claircore.Layer) ([]*clairco
 		"version", ps.Version(),
 		"layer", layer.Hash.String())
 	zlog.Debug(ctx).Msg("start")
+
+	layer.ChkSumLock.Lock()
+	defer layer.ChkSumLock.Unlock()
 
 	pkgs, err := DoScan(ctx, layer)
 	return pkgs, err
